@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 图标前景：黄/绿卡片叠 + 白卡（磁条 + ¥ 符号）+ 蓝色卡夹前袋，仿用户提供的 SVG 设计 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 整体缩放：内容收缩到安全区内，避免顶满图标 -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.7"
+        android:scaleY="0.7">
+
+    <!-- 黄色卡片 -->
+    <path
+        android:fillColor="#FFC93C"
+        android:pathData="M33.84,21 H74.16 A3.67,3.67 0 0 1 77.83,24.67 V37.5 A3.67,3.67 0 0 1 74.16,41.17 H33.84 A3.67,3.67 0 0 1 30.17,37.5 V24.67 A3.67,3.67 0 0 1 33.84,21 Z" />
+
+    <!-- 绿色卡片 -->
+    <path
+        android:fillColor="#00C786"
+        android:pathData="M32,27.23 H76 A3.67,3.67 0 0 1 79.67,30.9 V43.73 A3.67,3.67 0 0 1 76,47.4 H32 A3.67,3.67 0 0 1 28.33,43.73 V30.9 A3.67,3.67 0 0 1 32,27.23 Z" />
+
+    <!-- 白色主卡片 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M31.63,34.93 H76.37 A5.13,5.13 0 0 1 81.5,40.06 V55.47 A5.13,5.13 0 0 1 76.37,60.6 H31.63 A5.13,5.13 0 0 1 26.5,55.47 V40.06 A5.13,5.13 0 0 1 31.63,34.93 Z" />
+
+    <!-- 磁条组（5 条竖纹） -->
+    <path
+        android:fillColor="#E5EAF3"
+        android:pathData="M32.67,41.17 H35.23 V48.5 H32.67 Z" />
+    <path
+        android:fillColor="#E5EAF3"
+        android:pathData="M37.13,41.17 H39.73 V48.5 H37.13 Z" />
+    <path
+        android:fillColor="#E5EAF3"
+        android:pathData="M41.6,41.17 H44.2 V48.5 H41.6 Z" />
+    <path
+        android:fillColor="#E5EAF3"
+        android:pathData="M45.93,41.17 H48.53 V48.5 H45.93 Z" />
+    <path
+        android:fillColor="#E5EAF3"
+        android:pathData="M50.33,41.17 H52.87 V48.5 H50.33 Z" />
+
+    <!-- ¥ 符号（SVG text 转描边路径） -->
+    <path
+        android:strokeColor="#E5EAF3"
+        android:strokeWidth="1.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M67.93,39.67 L72.33,44.47 L76.73,39.67" />
+    <path
+        android:strokeColor="#E5EAF3"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M72.33,43.73 V49.23" />
+    <path
+        android:strokeColor="#E5EAF3"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69.03,45.57 H75.63" />
+    <path
+        android:strokeColor="#E5EAF3"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69.03,47.77 H75.63" />
+
+    <!-- 卡夹前袋（带垂直渐变） -->
+    <path android:pathData="M22.83,46.67 C48.83,56.73 59.17,56.73 85.17,46.67 L85.17,76.5 C85.17,80.17 82.37,83.83 79.57,83.83 L25.63,83.83 C22.83,83.83 22.83,80.17 22.83,76.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="22.83"
+                android:startY="46.67"
+                android:endX="22.83"
+                android:endY="83.83"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF4A82FF" />
+                <item android:offset="1" android:color="#FF2B5FE8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 袋口高光弧线 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.35"
+        android:strokeWidth="0.73"
+        android:fillColor="#00000000"
+        android:pathData="M22.83,46.67 C48.83,56.73 59.17,56.73 85.17,46.67" />
+    </group>
+</vector>

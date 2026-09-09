@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- 页面全为浅色背景：状态栏图标用深色，避免定制系统(MIUI等)画白图标看不清 -->
+    <style name="Theme.CardVault" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

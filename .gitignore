@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+
+# Kotlin / Studio caches
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Local machine config (contains SDK path + signing passwords, never commit)
+local.properties
+
+# Build logs
+*.log
+
+# Captures
+captures/
+.externalNativeBuild/
+.cxx/
