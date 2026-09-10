@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cardvault.model.BankCard
-import com.example.cardvault.model.detectBrand
 import com.example.cardvault.model.formatGroups
 import com.example.cardvault.model.maskNumber
 import com.example.cardvault.ui.theme.PageBg
@@ -132,14 +131,8 @@ fun CardDetailScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-            DetailRow("银行", card.bankName.ifBlank { "—" })
-            DetailRow(
-                "卡组织",
-                (card.brandOverride ?: detectBrand(card.cardNumber)).label.ifBlank { "未识别" }
-            )
-            DetailRow("类型", card.type.label)
-            DetailRow("持卡人", card.holderName.ifBlank { "—" })
-            DetailRow("有效期", card.expiry.ifBlank { "—" }.let { com.example.cardvault.model.formatExpiry(it) })
+            // 只列卡面上看不到的信息：银行、卡组织、类型、持卡人、有效期都由卡面呈现，
+            // 这里不再重复；卡号因为在卡面上是遮掩/可展开的，单独保留在上面。
             if (card.type == com.example.cardvault.model.CardType.CREDIT && card.creditLimit.isNotBlank()) {
                 DetailRow("信用额度", com.example.cardvault.model.formatCnyAmount(card.creditLimit))
             }

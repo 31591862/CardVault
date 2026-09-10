@@ -73,7 +73,7 @@ app/src/main/java/com/example/cardvault/
 
 ## 版本规则
 
-三位式 `x.y.z`：第三位 = bug 修复，第二位 = 新功能，第一位 = 重大变更。当前 v1.2.0。
+三位式 `x.y.z`：第三位 = bug 修复，第二位 = 新功能，第一位 = 重大变更。当前 v1.2.1。
 
 ## TODO
 

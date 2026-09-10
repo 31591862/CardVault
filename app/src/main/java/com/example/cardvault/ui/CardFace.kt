@@ -45,7 +45,8 @@ fun BankCardFace(
     onLongClick: (() -> Unit)? = null
 ) {
     val palette = paletteFor(card.bankName)
-    val brand = detectBrand(card.cardNumber)
+    // 用户可在编辑页手动指定卡组织，手动优先于 BIN 自动识别
+    val brand = card.brandOverride ?: detectBrand(card.cardNumber)
 
     Box(
         modifier = modifier

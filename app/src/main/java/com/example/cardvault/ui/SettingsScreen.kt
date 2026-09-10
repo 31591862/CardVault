@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -54,6 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cardvault.BackupJob
+import com.example.cardvault.BackupKind
+import com.example.cardvault.model.BankCard
 import com.example.cardvault.ui.theme.AccentBlue
 import com.example.cardvault.ui.theme.IconChipBg
 import com.example.cardvault.ui.theme.PageBg
@@ -603,4 +609,60 @@ private fun PasswordDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+}
+
+/**
+ * 导出 / 导入备份的阶段进度弹窗。
+ *
+ * 只显示"第几步 + 当前在干什么"，不显示百分比：PBKDF2 派生和 AES 加解密都是一次性操作，
+ * 中途拿不到可量化的进度，给个假百分比反而更让人焦虑（卡在 62% 不动）。
+ * 全程不可取消（返回键、点外部都不关），避免中途退出留下写了一半的卡库。
+ */
+@Composable
+internal fun BackupProgressDialog(job: BackupJob) {
+    Dialog(
+        onDismissRequest = { },
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 56.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(40.dp),
+                    color = AccentBlue,
+                    strokeWidth = 3.5.dp
+                )
+                Spacer(modifier = Modifier.size(16.dp))
+                Text(
+                    text = if (job.kind == BackupKind.EXPORT) "正在导出备份" else "正在导入备份",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = job.stageText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.size(10.dp))
+                Text(
+                    text = "第 ${job.step} / ${job.total} 步",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
 }

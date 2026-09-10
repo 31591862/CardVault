@@ -37,6 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
@@ -53,6 +57,7 @@ import com.example.cardvault.data.BackupCrypto
 import com.example.cardvault.data.BackupFormatException
 import com.example.cardvault.data.VaultRepository
 import com.example.cardvault.model.BankCard
+import com.example.cardvault.ui.BackupProgressDialog
 import com.example.cardvault.ui.CardDetailScreen
 import com.example.cardvault.ui.CardEditScreen
 import com.example.cardvault.ui.CardListScreen
@@ -223,6 +228,21 @@ private val screenSaver = Saver<Screen, String>(
     } }
 )
 
+/** 备份任务类型：决定进度弹窗的标题 */
+internal enum class BackupKind { EXPORT, IMPORT }
+
+/**
+ * 正在执行的备份任务进度。
+ * 只有 step/total 这种"阶段进度"是真实的 —— PBKDF2 派生、AES 解密都是一次性操作，
+ * 中途拿不到可量化的百分比，所以刻意不做假百分比，只告诉用户"现在在第几步、在干什么"。
+ */
+internal data class BackupJob(
+    val kind: BackupKind,
+    val stageText: String,
+    val step: Int,
+    val total: Int
+)
+
 @Composable
 private fun AppHost(
     unlockedState: androidx.compose.runtime.MutableState<Boolean>,
@@ -245,6 +265,10 @@ private fun AppHost(
     // 从二级页面返回时 LazyColumn 恢复原滚动位置（从哪来回哪去）。
     // 放在 AnimatedContent 外面，锁屏/解锁切换也不会丢。
     val listState = rememberLazyListState()
+    // 导出/导入必须跑在后台线程：PBKDF2 21 万轮派生 + AES 加解密是纯 CPU 活，
+    // 放在主线程会把 Compose 的渲染和动画一起冻住（表现为"点了像死机"）。
+    val scope = rememberCoroutineScope()
+    var backupJob by remember { mutableStateOf<BackupJob?>(null) }
 
     LaunchedEffect(unlocked) {
         if (unlocked) {
@@ -380,42 +404,76 @@ private fun AppHost(
                 onScreenshotProtectionChanged = onSetSecure,
                 onExport = { uri, password ->
                     if (activity != null) {
-                        try {
-                            val json = repo.toExportJson(cards)
-                            val payload = BackupCrypto.encrypt(json.toByteArray(Charsets.UTF_8), password)
-                            // "wt" = write + truncate：部分厂商 DocumentsProvider 覆盖写已有文件时
-                            // 用默认 "w" 模式会出现只清空不写入（文件 0 字节）的怪癖
-                            activity.contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                                out.write(payload)
-                                out.flush()
-                            } ?: throw IllegalStateException("无法打开目标文件写入")
-                            // 写完读回来校验：文件系统说谎时不能谎报"已导出"
-                            val written = activity.contentResolver.openInputStream(uri)?.use { it.readBytes().size }
-                                ?: throw IllegalStateException("无法读回备份文件校验")
-                            if (written != payload.size) {
-                                throw IllegalStateException("写入不完整（期望 ${payload.size}B，实际 ${written}B）")
+                        scope.launch {
+                            try {
+                                backupJob = BackupJob(BackupKind.EXPORT, "正在整理卡片数据…", 1, 3)
+                                val json = withContext(Dispatchers.Default) { repo.toExportJson(cards) }
+
+                                backupJob = BackupJob(BackupKind.EXPORT, "正在加密备份数据…", 2, 3)
+                                val payload = withContext(Dispatchers.Default) {
+                                    BackupCrypto.encrypt(json.toByteArray(Charsets.UTF_8), password)
+                                }
+
+                                backupJob = BackupJob(BackupKind.EXPORT, "正在写入文件…", 3, 3)
+                                withContext(Dispatchers.IO) {
+                                    // "wt" = write + truncate：部分厂商 DocumentsProvider 覆盖写已有文件时
+                                    // 用默认 "w" 模式会出现只清空不写入（文件 0 字节）的怪癖
+                                    activity.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                                        out.write(payload)
+                                        out.flush()
+                                    } ?: throw IllegalStateException("无法打开目标文件写入")
+                                    // 写完读回来校验：文件系统说谎时不能谎报"已导出"
+                                    val written = activity.contentResolver.openInputStream(uri)?.use { it.readBytes().size }
+                                        ?: throw IllegalStateException("无法读回备份文件校验")
+                                    if (written != payload.size) {
+                                        throw IllegalStateException("写入不完整（期望 ${payload.size}B，实际 ${written}B）")
+                                    }
+                                }
+                                Toast.makeText(context, "已导出 ${cards.size} 张卡", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "导出失败：${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                backupJob = null
                             }
-                            Toast.makeText(context, "已导出 ${cards.size} 张卡", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "导出失败：${e.message}", Toast.LENGTH_LONG).show()
                         }
                     }
                 },
                 onImport = { uri, password ->
                     if (activity != null) {
-                        try {
-                            val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                ?: throw IllegalStateException("无法读取备份文件")
-                            val plain = BackupCrypto.decrypt(bytes, password).toString(Charsets.UTF_8)
-                            val incoming = repo.fromExportJson(plain)
-                            val merged = mergeCards(cards.toList(), incoming)
-                            persist(merged)
-                            goBack()
-                            Toast.makeText(context, "导入完成，共 ${merged.size} 张卡", Toast.LENGTH_LONG).show()
-                        } catch (e: BackupFormatException) {
-                            Toast.makeText(context, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                        scope.launch {
+                            try {
+                                backupJob = BackupJob(BackupKind.IMPORT, "正在读取备份文件…", 1, 4)
+                                val bytes = withContext(Dispatchers.IO) {
+                                    activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                        ?: throw IllegalStateException("无法读取备份文件")
+                                }
+
+                                backupJob = BackupJob(BackupKind.IMPORT, "正在校验密码并解密…", 2, 4)
+                                val plain = withContext(Dispatchers.Default) {
+                                    BackupCrypto.decrypt(bytes, password).toString(Charsets.UTF_8)
+                                }
+
+                                backupJob = BackupJob(BackupKind.IMPORT, "正在合并卡片…", 3, 4)
+                                // 先在主线程快照当前卡库，后台线程只做纯计算
+                                val snapshot = cards.toList()
+                                val merged = withContext(Dispatchers.Default) {
+                                    mergeCards(snapshot, repo.fromExportJson(plain))
+                                }
+
+                                backupJob = BackupJob(BackupKind.IMPORT, "正在写入卡库…", 4, 4)
+                                withContext(Dispatchers.IO) { repo.save(merged) }
+                                // 状态更新回主线程
+                                cards.clear()
+                                cards.addAll(merged.sortedByDescending { it.updatedAt })
+                                goBack()
+                                Toast.makeText(context, "导入完成，共 ${merged.size} 张卡", Toast.LENGTH_LONG).show()
+                            } catch (e: BackupFormatException) {
+                                Toast.makeText(context, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                backupJob = null
+                            }
                         }
                     }
                 }
@@ -548,6 +606,9 @@ private fun AppHost(
             }
         }
         }
+            // 备份任务进行中：整屏遮罩 + 阶段进度。
+            // 期间禁止返回键/点外部关闭 —— 中途取消会留下写了一半的卡库
+            backupJob?.let { job -> BackupProgressDialog(job) }
         }
     }
 }
