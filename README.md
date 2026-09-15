@@ -40,6 +40,17 @@ Kotlin + Jetpack Compose + Material 3。刻意零重依赖：无 Room、无 SQLC
 ./gradlew assembleRelease    # 正式签名包
 ```
 
+> 在 Windows 的 Git Bash 下 `./gradlew` 会报 `找不到或无法加载主类 org.gradle.wrapper.GradleWrapperMain`：
+> wrapper 脚本不做路径转换，`APP_HOME` 被拼成 `/c/...`，Windows 版 java.exe 认不出。改用发行版自带的启动脚本即可
+> （它内部有 `cygpath` 转换）：
+>
+> ```bash
+> GR=$(ls -d ~/.gradle/wrapper/dists/gradle-*-bin/*/gradle-*/bin/gradle | head -1)
+> JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" "$GR" assembleRelease --offline
+> ```
+>
+> 另外注意：如果手机上装的已经是正式签名包，`adb install app-debug.apk` 会因证书不同直接失败，真机验证也要打 release 包。
+
 **克隆后必做**：本仓库不含签名信息。在项目根目录创建 `local.properties`（已 gitignore），补上：
 
 ```properties
@@ -73,7 +84,15 @@ app/src/main/java/com/example/cardvault/
 
 ## 版本规则
 
-三位式 `x.y.z`：第三位 = bug 修复，第二位 = 新功能，第一位 = 重大变更。当前 v1.2.1。
+三位式 `x.y.z`：第三位 = bug 修复，第二位 = 新功能，第一位 = 重大变更。当前 v1.2.2。
+
+## 更新日志
+
+| 版本 | 说明 |
+|---|---|
+| v1.2.2 | 修复首页顶栏按钮之间的空隙会误触底层「全选」——按钮区由「三层常驻 + 透明度交叉淡化」改为单层切换（`AnimatedContent`），并固定宽度 168dp |
+| v1.2.1 | 搜索栏移出顶栏改为内容区浮层；备份导入导出移到后台协程并加阶段进度弹窗；设置页分组卡片式改版；全局去紫、统一「浅灰底 + 蓝强调」 |
+| v1.2.0 | 首个归档版本 |
 
 ## TODO
 

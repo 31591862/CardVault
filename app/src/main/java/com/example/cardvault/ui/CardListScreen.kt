@@ -1,6 +1,7 @@
 package com.example.cardvault.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -8,7 +9,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -73,11 +77,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -94,9 +100,13 @@ import com.example.cardvault.ui.theme.PageBg
 private enum class TopBarMode { HOME, SEARCH, SELECT }
 
 /**
- * 顶栏形态槽位：内容永远参与组合和测量（保证槽位宽度恒定、位置不跳），
- * 只对透明度做动画。激活的形态 zIndex 置顶，负责接收点击；其余形态 alpha=0
- * 且压在下层，事件全部落在激活层，不会误触。
+ * 标题区的形态槽位（只放文本，可点区域为零）：内容永远参与组合和测量，
+ * 保证槽位宽度恒定、标题不左右弹跳，只对透明度做动画。
+ *
+ * ⚠️ 未激活的形态除了 alpha=0 还要**彻底哑掉**：alpha 只影响绘制，节点仍然留在
+ * 命中测试和无障碍树里。按钮区曾用过同样的"常驻 + alpha"结构，结果图标之间的
+ * 空隙点下去会穿到下层按钮上（误触「全选」），最后改成 AnimatedContent 单层才根治。
+ * 这里虽是纯文本，也照同样标准处理：吞掉指针事件 + 清空语义。
  */
 @Composable
 private fun TopBarCrossfadeSlot(
@@ -114,6 +124,25 @@ private fun TopBarCrossfadeSlot(
         modifier = Modifier
             .alpha(alpha)
             .zIndex(if (isSelected) 1f else 0f)
+            .then(
+                if (isSelected) {
+                    Modifier
+                } else {
+                    Modifier
+                        .clearAndSetSemantics { }
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    // 必须在 Initial 这一趟（从根到叶）就消费掉：
+                                    // Main 趟是叶子先处理，等事件回到这一层，下层按钮
+                                    // 早已响应完毕，拦不住——实测漏点会误触"全选"。
+                                    awaitPointerEvent(PointerEventPass.Initial)
+                                        .changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                }
+            )
     ) {
         content()
     }
@@ -312,97 +341,123 @@ fun CardListScreen(
                         selecting -> TopBarMode.SELECT
                         else -> TopBarMode.HOME
                     }
-                    // 与标题区同理：常驻布局 + 透明度交叉淡化，右侧对齐。
-                    // ⚠️ 这里绝不能 fillMaxWidth：TopAppBar 会先量按钮区再分剩余宽度给标题，
-                    // 按钮区吃满整行会把标题槽位饿死（标题消失、通栏搜索框被挤成细长条、顶栏撑高）
-                    Box(contentAlignment = Alignment.CenterEnd) {
-                        TopBarCrossfadeSlot(mode, TopBarMode.SELECT) {
-                            Row {
-                                TextButton(
-                                    onClick = {
-                                        // 全选 ↔ 全不选：当前全部选中时点击即清空
-                                        selectedIds = if (selectedIds.size == cards.size) {
-                                            emptySet()
-                                        } else {
-                                            cards.map { it.id }.toSet()
-                                        }
-                                    }
-                                ) {
-                                    Text(if (selectedIds.size == cards.size) "全不选" else "全选", fontSize = 13.sp)
-                                }
-                                IconButton(
-                                    onClick = { showDeleteConfirm = true },
-                                    enabled = selectedIds.isNotEmpty()
-                                ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "删除所选",
-                                        tint = if (selectedIds.isNotEmpty()) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                        }
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    selecting = false
-                                    selectedIds = emptySet()
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "退出选择")
-                                }
-                            }
-                        }
-                        TopBarCrossfadeSlot(mode, TopBarMode.SEARCH) {
-                            TextButton(
-                                onClick = {
-                                    searchActive = false
-                                    query = ""
-                                    keyboard?.hide()
-                                }
-                            ) {
-                                Text("取消")
-                            }
-                        }
-                        TopBarCrossfadeSlot(mode, TopBarMode.HOME) {
-                            Row {
-                                Box {
-                                    IconButton(onClick = { filterMenuExpanded = true }) {
-                                        Icon(
-                                            FilterIcon,
-                                            contentDescription = "筛选",
-                                            tint = if (filterType != null) {
-                                                MaterialTheme.colorScheme.primary
+                    // 这里只保留"当前形态"这一层，用 AnimatedContent 做淡入淡出。
+                    // ⚠️ 不要改回"三层常驻 + alpha 交叉淡化"：alpha=0 只是不画，节点仍留在
+                    // 命中测试里，主态图标之间的空隙点下去会穿到下层，实测能误触多选层的
+                    // 「全选」（首页所有卡片突然带上选中框），加消费事件的补丁也堵不住。
+                    // 外层固定宽度 168dp：按钮区宽度不随形态变，标题槽位宽度恒定、标题不弹跳；
+                    // 内层用 SizeTransform(clip = false) 关掉尺寸动画与裁切，内容不会被切边。
+                    // ⚠️ 也绝不能 fillMaxWidth：TopAppBar 先量按钮区再分剩余宽度给标题，
+                    // 按钮区吃满整行会把标题槽位饿死（标题消失、顶栏撑高）。
+                    Box(
+                        modifier = Modifier.width(168.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                    AnimatedContent(
+                        targetState = mode,
+                        transitionSpec = {
+                            (fadeIn(tween(200)) togetherWith fadeOut(tween(150)))
+                                .using(SizeTransform(clip = false))
+                        },
+                        contentAlignment = Alignment.Center,
+                        label = "topBarActions"
+                    ) { m ->
+                        when (m) {
+                            TopBarMode.SELECT -> {
+                                Row {
+                                    TextButton(
+                                        onClick = {
+                                            // 全选 ↔ 全不选：当前全部选中时点击即清空
+                                            selectedIds = if (selectedIds.size == cards.size) {
+                                                emptySet()
                                             } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                cards.map { it.id }.toSet()
+                                            }
+                                        }
+                                    ) {
+                                        Text(if (selectedIds.size == cards.size) "全不选" else "全选", fontSize = 13.sp)
+                                    }
+                                    IconButton(
+                                        onClick = { showDeleteConfirm = true },
+                                        enabled = selectedIds.isNotEmpty()
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "删除所选",
+                                            tint = if (selectedIds.isNotEmpty()) {
+                                                MaterialTheme.colorScheme.error
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                             }
                                         )
                                     }
-                                    FilterMenu(
-                                        expanded = filterMenuExpanded,
-                                        selected = when (filterType) {
-                                            null -> 0
-                                            CardType.DEBIT -> 1
-                                            CardType.CREDIT -> 2
-                                        },
-                                        onSelect = { index ->
-                                            filterType = when (index) {
-                                                1 -> CardType.DEBIT
-                                                2 -> CardType.CREDIT
-                                                else -> null
-                                            }
-                                            filterMenuExpanded = false
-                                        },
-                                        onDismiss = { filterMenuExpanded = false }
-                                    )
+                                    IconButton(onClick = {
+                                        selecting = false
+                                        selectedIds = emptySet()
+                                    }) {
+                                        Icon(Icons.Default.Close, contentDescription = "退出选择")
+                                    }
                                 }
-                                IconButton(onClick = { searchActive = true }) {
-                                    Icon(Icons.Default.Search, contentDescription = "搜索")
+                            }
+                            TopBarMode.SEARCH -> {
+                                TextButton(
+                                    onClick = {
+                                        searchActive = false
+                                        query = ""
+                                        keyboard?.hide()
+                                    }
+                                ) {
+                                    Text("取消")
                                 }
-                                IconButton(onClick = onSettings) {
-                                    Icon(Icons.Default.Settings, contentDescription = "设置")
+                            }
+                            TopBarMode.HOME -> {
+                                Row {
+                                    Box {
+                                        IconButton(onClick = {
+                                        filterMenuExpanded = true
+                                    }) {
+                                            Icon(
+                                                FilterIcon,
+                                                contentDescription = "筛选",
+                                                tint = if (filterType != null) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            )
+                                        }
+                                        FilterMenu(
+                                            expanded = filterMenuExpanded,
+                                            selected = when (filterType) {
+                                                null -> 0
+                                                CardType.DEBIT -> 1
+                                                CardType.CREDIT -> 2
+                                            },
+                                            onSelect = { index ->
+                                                filterType = when (index) {
+                                                    1 -> CardType.DEBIT
+                                                    2 -> CardType.CREDIT
+                                                    else -> null
+                                                }
+                                                filterMenuExpanded = false
+                                            },
+                                            onDismiss = { filterMenuExpanded = false }
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        searchActive = true
+                                    }) {
+                                        Icon(Icons.Default.Search, contentDescription = "搜索")
+                                    }
+                                    IconButton(onClick = {
+                                        onSettings()
+                                    }) {
+                                        Icon(Icons.Default.Settings, contentDescription = "设置")
+                                    }
                                 }
                             }
                         }
+                    }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
